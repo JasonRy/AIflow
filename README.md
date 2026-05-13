@@ -74,6 +74,58 @@ Content-Type: application/json
 GET /api/executions
 ```
 
+
+### Workflow Definition APIs
+
+```http
+POST /api/apps
+Content-Type: application/json
+
+{
+  "name": "默认应用",
+  "description": "应用说明"
+}
+```
+
+```http
+GET /api/apps
+```
+
+```http
+POST /api/workflow-definitions
+Content-Type: application/json
+
+{
+  "appId": 1,
+  "name": "客户问题处理",
+  "description": "start -> llm -> end"
+}
+```
+
+```http
+GET /api/workflow-definitions
+GET /api/workflow-definitions/{workflowId}
+```
+
+```http
+PUT /api/workflow-definitions/{workflowId}/draft
+Content-Type: application/json
+
+{
+  "nodes": [
+    {
+      "key": "start_001",
+      "type": "start",
+      "title": "开始",
+      "x": 80,
+      "y": 180,
+      "config": { "inputKey": "query" }
+    }
+  ],
+  "edges": [],
+  "variables": {}
+}
+```
 ## Persistence
 
 Execution history is stored in an H2 database under `./data/aiflow` by default. The `data/` directory is ignored by git.
@@ -107,4 +159,5 @@ jdbc:h2:file:./data/aiflow;AUTO_SERVER=TRUE
 - Build a visual workflow editor with configurable node panels.
 - Add variable mapping, branch conditions, loop support, tool nodes, and knowledge retrieval nodes.
 - Add workflow versioning, publish/run separation, and debug traces.
+
 

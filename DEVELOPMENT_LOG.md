@@ -49,3 +49,33 @@
 
 - The old `/history` endpoint remains as a compatibility alias for now.
 - Execution records currently persist the response-level call tree as JSON. A later runtime engine should split this into per-node execution rows.
+
+## 2026-05-13 - Workflow definition foundation
+
+### Added
+
+- Added Dify-like workflow definition persistence tables:
+  - `ai_apps`
+  - `workflow_definitions`
+  - `workflow_versions`
+  - `workflow_nodes`
+  - `workflow_edges`
+- Added workflow definition APIs:
+  - `POST /api/apps`
+  - `GET /api/apps`
+  - `POST /api/workflow-definitions`
+  - `GET /api/workflow-definitions`
+  - `GET /api/workflow-definitions/{workflowId}`
+  - `PUT /api/workflow-definitions/{workflowId}/draft`
+- Added `WorkflowDefinitionService` to create apps, create workflows, read latest draft versions, and save node/edge definitions.
+
+### Verified
+
+- `./mvnw.cmd test` passes.
+- Local smoke test created an app, created a workflow, and saved a `start -> llm -> end` draft definition.
+
+### Next work
+
+- Build dynamic runtime execution from saved workflow definitions.
+- Add node type contracts for `start`, `llm`, `condition`, `code`, `http`, `set_variable`, and `end`.
+- Start replacing the single-page static UI with workflow list/detail/editor views.
