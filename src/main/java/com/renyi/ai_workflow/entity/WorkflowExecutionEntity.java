@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -40,17 +39,15 @@ public class WorkflowExecutionEntity {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "text")
     private String inputText;
 
-    @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "text")
     private String answer;
 
-    @Lob
+    @Column(columnDefinition = "text")
     private String nodeTimings;
 
-    @Lob
+    @Column(columnDefinition = "text")
     private String callTreeJson;
 }

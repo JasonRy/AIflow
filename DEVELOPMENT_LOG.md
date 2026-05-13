@@ -79,3 +79,22 @@
 - Build dynamic runtime execution from saved workflow definitions.
 - Add node type contracts for `start`, `llm`, `condition`, `code`, `http`, `set_variable`, and `end`.
 - Start replacing the single-page static UI with workflow list/detail/editor views.
+
+## 2026-05-13 - Conversation history and Docker database
+
+### Added
+
+- Created and pushed the remote `develop` branch.
+- Changed the right-side execution panel into a chat-style conversation history panel.
+- Added `ExecutionHistoryResponse` so history responses include user input and assistant output.
+- Added Docker Compose PostgreSQL configuration:
+  - service: `postgres`
+  - container: `aiflow-postgres`
+  - database: `aiflow`
+- Switched the default application datasource to PostgreSQL.
+- Added test-only H2 configuration under `src/test/resources/application.yaml`.
+
+### Notes
+
+- Start the local database with `docker compose up -d postgres`.
+- Docker Desktop must be running before Compose can start the PostgreSQL container.

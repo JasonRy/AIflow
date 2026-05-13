@@ -4,13 +4,13 @@ spring:
   main:
     allow-bean-definition-overriding: true
   datasource:
-    url: ${AIFLOW_DATASOURCE_URL:jdbc:h2:file:./data/aiflow;AUTO_SERVER=TRUE}
-    driver-class-name: org.h2.Driver
-    username: ${AIFLOW_DATASOURCE_USERNAME:sa}
-    password: ${AIFLOW_DATASOURCE_PASSWORD:}
+    url: ${AIFLOW_DATASOURCE_URL:jdbc:postgresql://localhost:5432/aiflow}
+    driver-class-name: ${AIFLOW_DATASOURCE_DRIVER:org.postgresql.Driver}
+    username: ${AIFLOW_DATASOURCE_USERNAME:aiflow}
+    password: ${AIFLOW_DATASOURCE_PASSWORD:aiflow_dev_password}
   h2:
     console:
-      enabled: true
+      enabled: false
       path: /h2-console
   jpa:
     hibernate:

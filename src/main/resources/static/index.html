@@ -99,20 +99,25 @@ header { background: #1a1a2e; color: #fff; padding: 14px 24px; font-size: 18px; 
 .katex-display { overflow-x: auto; padding: 6px 0; }
 .katex { font-size: 1.05em; }
 
-/* 右侧历史 */
-.history-panel { width: 320px; display: flex; flex-direction: column; background: #fafafa; }
+/* 右侧对话历史 */
+.history-panel { width: 360px; display: flex; flex-direction: column; background: #fafafa; }
 .history-header { padding: 16px 20px; font-size: 15px; font-weight: 600; color: #333; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
 .history-header button { font-size: 12px; padding: 4px 10px; background: #f0f2f5; border: 1px solid #d0d0d0; border-radius: 6px; cursor: pointer; color: #555; }
 .history-list { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-.record { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 14px; transition: box-shadow 0.2s; }
+.record { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 12px; transition: box-shadow 0.2s; }
 .record:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-.record-time { font-size: 12px; color: #999; margin-bottom: 6px; }
+.record-time { font-size: 12px; color: #999; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .record-intent { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; font-weight: 500; }
 .intent-问题 { background: #e8f4fd; color: #1a73e8; }
 .intent-数据分析 { background: #e8f5e9; color: #2e7d32; }
 .intent-other { background: #f0f0f0; color: #666; }
-.record-answer { font-size: 13px; color: #444; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.record-cost { font-size: 11px; color: #bbb; margin-top: 6px; }
+.history-chat { display: flex; flex-direction: column; gap: 8px; }
+.history-message { display: flex; flex-direction: column; gap: 4px; }
+.history-role { font-size: 11px; color: #8a8f98; font-weight: 600; }
+.history-bubble { font-size: 13px; line-height: 1.55; padding: 9px 10px; border-radius: 10px; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.history-bubble.user { background: #1a1a2e; color: #fff; border-bottom-right-radius: 4px; }
+.history-bubble.assistant { background: #f6f8fb; color: #333; border: 1px solid #edf0f5; border-bottom-left-radius: 4px; }
+.record-cost { font-size: 11px; color: #9aa0a6; margin-top: 8px; }
 .node-timings { font-size: 11px; color: #bbb; margin-top: 8px; font-family: monospace; letter-spacing: 0.02em; }
 .call-tree { background: #1a1a2e; border-radius: 10px; padding: 10px 14px 12px; margin-top: 10px; font-family: 'Consolas','Menlo',monospace; font-size: 12px; }
 .call-tree-title { color: #7986cb; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
@@ -245,10 +250,10 @@ header { background: #1a1a2e; color: #fff; padding: 14px 24px; font-size: 18px; 
     </div>
   </div>
 
-  <!-- 右侧历史 -->
+  <!-- 右侧对话历史 -->
   <div class="history-panel">
     <div class="history-header">
-      执行记录
+      对话历史
       <button onclick="loadHistory()">刷新</button>
     </div>
     <div class="history-list" id="historyList">
@@ -693,17 +698,28 @@ async function loadHistory() {
   try {
     const res  = await fetch('/api/executions');
     const list = await res.json();
-    if (!list.length) { historyList.innerHTML = '<div class="empty">暂无记录</div>'; return; }
+    if (!list.length) { historyList.innerHTML = '<div class="empty">暂无对话</div>'; return; }
     historyList.innerHTML = list.map(r => {
-      const cls = r.intent === '数据分析' ? 'intent-数据分析'
+      const cls = r.intent === '数据分析' || r.workflowType === 'analysis' ? 'intent-数据分析'
                 : r.intent?.includes('问题') ? 'intent-问题' : 'intent-other';
+      const typeLabel = r.workflowType === 'analysis' ? '数据分析' : '对话';
+      const providerLabel = r.provider === 'deepseek' ? 'DeepSeek' : '通义';
       return `<div class="record">
-        <div class="record-time">${r.timestamp}</div>
-        <span class="record-intent ${cls}">${r.intent}</span>
-        ${r.model ? `<span class="record-intent intent-other" style="margin-left:4px">${r.model}</span>` : ''}
-        ${r.provider ? `<span class="record-intent intent-other" style="margin-left:4px;background:#e8f4fd;color:#1a73e8">${r.provider === 'deepseek' ? 'DeepSeek' : '通义'}</span>` : ''}
-        <div class="record-answer">${r.answer}</div>
-        <div class="record-cost">耗时 ${r.costMs}ms${r.nodeTimings ? `<span class="node-timings" style="display:inline;margin:0 0 0 6px">${r.nodeTimings}</span>` : ''}</div>
+        <div class="record-time"><span>${r.timestamp}</span><span>#${r.id || ''}</span></div>
+        <span class="record-intent ${cls}">${typeLabel}</span>
+        ${r.model ? `<span class="record-intent intent-other" style="margin-left:4px">${escapeHtml(r.model)}</span>` : ''}
+        ${r.provider ? `<span class="record-intent intent-other" style="margin-left:4px;background:#e8f4fd;color:#1a73e8">${providerLabel}</span>` : ''}
+        <div class="history-chat">
+          <div class="history-message">
+            <div class="history-role">用户</div>
+            <div class="history-bubble user">${escapeHtml(r.userMessage || '')}</div>
+          </div>
+          <div class="history-message">
+            <div class="history-role">助手</div>
+            <div class="history-bubble assistant">${escapeHtml(r.assistantMessage || '')}</div>
+          </div>
+        </div>
+        <div class="record-cost">耗时 ${r.costMs}ms${r.nodeTimings ? `<span class="node-timings" style="display:inline;margin:0 0 0 6px">${escapeHtml(r.nodeTimings)}</span>` : ''}</div>
       </div>`;
     }).join('');
   } catch(e) {}

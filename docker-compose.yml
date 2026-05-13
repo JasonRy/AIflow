@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aiflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AIFLOW_POSTGRES_DB:-aiflow}
+      POSTGRES_USER: ${AIFLOW_POSTGRES_USER:-aiflow}
+      POSTGRES_PASSWORD: ${AIFLOW_POSTGRES_PASSWORD:-aiflow_dev_password}
+    ports:
+      - "${AIFLOW_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - aiflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIFLOW_POSTGRES_USER:-aiflow} -d ${AIFLOW_POSTGRES_DB:-aiflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  aiflow-postgres-data:

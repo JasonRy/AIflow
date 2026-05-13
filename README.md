@@ -37,6 +37,28 @@ Open:
 http://localhost:8080
 ```
 
+## Local Database
+
+AIflow uses PostgreSQL for local persistence by default. Start the database with Docker:
+
+```powershell
+docker compose up -d postgres
+```
+
+Default connection:
+
+```text
+jdbc:postgresql://localhost:5432/aiflow
+username: aiflow
+password: aiflow_dev_password
+```
+
+Then start the app:
+
+```powershell
+./mvnw.cmd spring-boot:run
+```
+
 ## Useful Commands
 
 ```powershell
@@ -128,19 +150,7 @@ Content-Type: application/json
 ```
 ## Persistence
 
-Execution history is stored in an H2 database under `./data/aiflow` by default. The `data/` directory is ignored by git.
-
-The H2 console is enabled for local development:
-
-```text
-http://localhost:8080/h2-console
-```
-
-Default JDBC URL:
-
-```text
-jdbc:h2:file:./data/aiflow;AUTO_SERVER=TRUE
-```
+Execution history and workflow definitions are stored in the local Docker PostgreSQL database by default. Tests use an in-memory H2 database.
 
 ## Current Features
 
