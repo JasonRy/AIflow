@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ai-workflow
+  main:
+    allow-bean-definition-overriding: true
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:your-dashscope-api-key-here}
+      chat:
+        options:
+          model: ${DASHSCOPE_MODEL:qwen-max}
+
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:your-deepseek-api-key-here}
+
+server:
+  port: ${SERVER_PORT:8080}
