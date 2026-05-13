@@ -30,3 +30,22 @@
 - Move GET endpoints with long user input to POST JSON APIs.
 - Add persistent storage for workflows and execution records.
 - Introduce a workflow definition model before building a Dify-like visual editor.
+
+## 2026-05-13 - API and persistence foundation
+
+### Added
+
+- Added POST JSON APIs for workflow execution:
+  - `POST /api/workflows/chat/run`
+  - `POST /api/workflows/analysis/run`
+- Added persistent execution history with Spring Data JPA and H2.
+- Added `GET /api/executions` for the latest execution records.
+- Added request DTOs with basic validation.
+- Added a global exception handler with structured API errors.
+- Updated the static frontend to call the new POST APIs.
+- Added local H2 data files to `.gitignore`.
+
+### Notes
+
+- The old `/history` endpoint remains as a compatibility alias for now.
+- Execution records currently persist the response-level call tree as JSON. A later runtime engine should split this into per-node execution rows.

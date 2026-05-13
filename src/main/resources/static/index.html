@@ -406,11 +406,18 @@ async function sendMessage() {
   appendMsg(text, 'user');
   const loading = appendMsg('思考中...', 'bot loading');
   try {
-    const res  = await fetch('/workflow?message=' + encodeURIComponent(text)
-                           + '&provider=' + getProvider()
-                           + '&model=' + getModel()
-                           + '&enableSearch=' + getEnableSearch());
+    const res = await fetch('/api/workflows/chat/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        provider: getProvider(),
+        model: getModel(),
+        enableSearch: getEnableSearch()
+      })
+    });
     const data = await res.json();
+    if (!res.ok) throw new Error(data.message || '请求失败');
     loading.className = 'msg bot';
     renderMarkdown(data.answer, loading);
     if (data.nodeTimings) {
@@ -423,7 +430,7 @@ async function sendMessage() {
     loadHistory();
   } catch (e) {
     loading.className = 'msg bot';
-    loading.textContent = '请求失败，请重试。';
+    loading.textContent = e.message || '请求失败，请重试。';
   } finally {
     sendBtn.disabled = false;
     input.focus();
@@ -437,11 +444,18 @@ async function runAnalysis() {
   analysisBtn.disabled = true;
   analysisResult.innerHTML = '<div class="analysis-loading">分析中，请稍候...</div>';
   try {
-    const res  = await fetch('/analysis?data=' + encodeURIComponent(data)
-                           + '&provider=' + getProvider()
-                           + '&model=' + getModel()
-                           + '&enableSearch=' + getEnableSearch());
+    const res = await fetch('/api/workflows/analysis/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data,
+        provider: getProvider(),
+        model: getModel(),
+        enableSearch: getEnableSearch()
+      })
+    });
     const json = await res.json();
+    if (!res.ok) throw new Error(json.message || '分析失败');
 
     const card = document.createElement('div');
     card.className = 'analysis-card';
@@ -466,7 +480,7 @@ async function runAnalysis() {
     analysisResult.appendChild(card);
     loadHistory();
   } catch (e) {
-    analysisResult.innerHTML = '<div class="placeholder">分析失败，请重试。</div>';
+    analysisResult.innerHTML = `<div class="placeholder">${e.message || '分析失败，请重试。'}</div>`;
   } finally {
     analysisBtn.disabled = false;
   }
@@ -475,7 +489,7 @@ async function runAnalysis() {
 /* ── 历史记录 ── */
 async function loadHistory() {
   try {
-    const res  = await fetch('/history');
+    const res  = await fetch('/api/executions');
     const list = await res.json();
     if (!list.length) { historyList.innerHTML = '<div class="empty">暂无记录</div>'; return; }
     historyList.innerHTML = list.map(r => {
@@ -497,3 +511,4 @@ loadHistory();
 </script>
 </body>
 </html>
+

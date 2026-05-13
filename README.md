@@ -44,6 +44,52 @@ http://localhost:8080
 ./mvnw.cmd package
 ```
 
+## API
+
+```http
+POST /api/workflows/chat/run
+Content-Type: application/json
+
+{
+  "message": "你好",
+  "provider": "tongyi",
+  "model": "qwen-max",
+  "enableSearch": false
+}
+```
+
+```http
+POST /api/workflows/analysis/run
+Content-Type: application/json
+
+{
+  "data": "待分析数据",
+  "provider": "tongyi",
+  "model": "qwen-max",
+  "enableSearch": false
+}
+```
+
+```http
+GET /api/executions
+```
+
+## Persistence
+
+Execution history is stored in an H2 database under `./data/aiflow` by default. The `data/` directory is ignored by git.
+
+The H2 console is enabled for local development:
+
+```text
+http://localhost:8080/h2-console
+```
+
+Default JDBC URL:
+
+```text
+jdbc:h2:file:./data/aiflow;AUTO_SERVER=TRUE
+```
+
 ## Current Features
 
 - Chat workflow execution with provider/model selection.
@@ -61,3 +107,4 @@ http://localhost:8080
 - Build a visual workflow editor with configurable node panels.
 - Add variable mapping, branch conditions, loop support, tool nodes, and knowledge retrieval nodes.
 - Add workflow versioning, publish/run separation, and debug traces.
+

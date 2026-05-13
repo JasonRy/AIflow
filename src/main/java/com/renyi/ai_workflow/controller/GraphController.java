@@ -3,14 +3,25 @@ package com.renyi.ai_workflow.controller;
 import com.alibaba.cloud.ai.graph.CompiledGraph;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renyi.ai_workflow.dto.AnalysisRunRequest;
+import com.renyi.ai_workflow.dto.WorkflowRunRequest;
+import com.renyi.ai_workflow.entity.WorkflowExecutionEntity;
 import com.renyi.ai_workflow.model.WorkflowResponse;
+import com.renyi.ai_workflow.repository.WorkflowExecutionRepository;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,36 +31,38 @@ import java.util.Optional;
 @CrossOrigin
 public class GraphController {
 
+    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final TypeReference<List<Map<String, Object>>> CALL_TREE_TYPE = new TypeReference<>() {};
+
     private final CompiledGraph workflowGraph;
     private final CompiledGraph analysisGraph;
-    private final List<WorkflowResponse> history = new ArrayList<>();
-    private static final DateTimeFormatter FMT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private final WorkflowExecutionRepository executionRepository;
+    private final ObjectMapper objectMapper;
 
     public GraphController(
             @Qualifier("myWorkflowGraph") CompiledGraph workflowGraph,
-            @Qualifier("analysisGraph")   CompiledGraph analysisGraph) {
+            @Qualifier("analysisGraph") CompiledGraph analysisGraph,
+            WorkflowExecutionRepository executionRepository,
+            ObjectMapper objectMapper) {
         this.workflowGraph = workflowGraph;
         this.analysisGraph = analysisGraph;
+        this.executionRepository = executionRepository;
+        this.objectMapper = objectMapper;
     }
 
-    @GetMapping("/workflow")
-    public WorkflowResponse workflow(
-            @RequestParam String message,
-            @RequestParam(defaultValue = "qwen-max") String model,
-            @RequestParam(defaultValue = "tongyi")   String provider,
-            @RequestParam(defaultValue = "false")    boolean enableSearch) throws Exception {
-
+    @PostMapping("/api/workflows/chat/run")
+    public WorkflowResponse workflow(@Valid @RequestBody WorkflowRunRequest request) throws Exception {
         long start = System.currentTimeMillis();
+        String model = defaultIfBlank(request.getModel(), "qwen-max");
+        String provider = defaultIfBlank(request.getProvider(), "tongyi");
 
-        // Reset branching timing keys to -1 so stale values from prior requests don't pollute callTree
         Map<String, Object> inputs = new HashMap<>();
-        inputs.put("input",        message);
-        inputs.put("model",        model);
-        inputs.put("provider",     provider);
-        inputs.put("enableSearch", String.valueOf(enableSearch));
-        inputs.put("answerMs",     -1L);
-        inputs.put("defaultMs",    -1L);
+        inputs.put("input", request.getMessage());
+        inputs.put("model", model);
+        inputs.put("provider", provider);
+        inputs.put("enableSearch", String.valueOf(request.isEnableSearch()));
+        inputs.put("answerMs", -1L);
+        inputs.put("defaultMs", -1L);
 
         Optional<OverAllState> result = workflowGraph.invoke(inputs, RunnableConfig.builder().build());
         long costMs = System.currentTimeMillis() - start;
@@ -57,13 +70,12 @@ public class GraphController {
         String answer = result
                 .map(s -> (String) s.value("output").orElse("无输出"))
                 .orElse("工作流执行失败");
-
         String intent = result
                 .map(s -> (String) s.value("intent").orElse("未知"))
                 .orElse("未知");
-
         String nodeTimings = assembleTimings(result.orElse(null),
                 "intentMs", "intent", "answerMs", "answer", "defaultMs", "default");
+        List<Map<String, Object>> callTree = buildWorkflowCallTree(result.orElse(null));
 
         WorkflowResponse response = WorkflowResponse.builder()
                 .answer(answer)
@@ -71,29 +83,26 @@ public class GraphController {
                 .model(model)
                 .provider(provider)
                 .nodeTimings(nodeTimings)
-                .callTree(buildWorkflowCallTree(result.orElse(null)))
+                .callTree(callTree)
                 .costMs(costMs)
                 .timestamp(LocalDateTime.now().format(FMT))
                 .build();
 
-        history.add(0, response);
+        saveExecution("chat", request.getMessage(), request.isEnableSearch(), response);
         return response;
     }
 
-    @GetMapping("/analysis")
-    public WorkflowResponse analysis(
-            @RequestParam String data,
-            @RequestParam(defaultValue = "qwen-max") String model,
-            @RequestParam(defaultValue = "tongyi")   String provider,
-            @RequestParam(defaultValue = "false")    boolean enableSearch) throws Exception {
-
+    @PostMapping("/api/workflows/analysis/run")
+    public WorkflowResponse analysis(@Valid @RequestBody AnalysisRunRequest request) throws Exception {
         long start = System.currentTimeMillis();
+        String model = defaultIfBlank(request.getModel(), "qwen-max");
+        String provider = defaultIfBlank(request.getProvider(), "tongyi");
 
         Map<String, Object> inputs = new HashMap<>();
-        inputs.put("data",         data);
-        inputs.put("model",        model);
-        inputs.put("provider",     provider);
-        inputs.put("enableSearch", String.valueOf(enableSearch));
+        inputs.put("data", request.getData());
+        inputs.put("model", model);
+        inputs.put("provider", provider);
+        inputs.put("enableSearch", String.valueOf(request.isEnableSearch()));
 
         Optional<OverAllState> result = analysisGraph.invoke(inputs, RunnableConfig.builder().build());
         long costMs = System.currentTimeMillis() - start;
@@ -101,9 +110,9 @@ public class GraphController {
         String output = result
                 .map(s -> (String) s.value("output").orElse("无输出"))
                 .orElse("分析失败");
-
         String nodeTimings = assembleTimings(result.orElse(null),
                 "typeMs", "type", "analysisMs", "analysis", "summaryMs", "summary");
+        List<Map<String, Object>> callTree = buildAnalysisCallTree(result.orElse(null));
 
         WorkflowResponse response = WorkflowResponse.builder()
                 .answer(output)
@@ -111,27 +120,74 @@ public class GraphController {
                 .model(model)
                 .provider(provider)
                 .nodeTimings(nodeTimings)
-                .callTree(buildAnalysisCallTree(result.orElse(null)))
+                .callTree(callTree)
                 .costMs(costMs)
                 .timestamp(LocalDateTime.now().format(FMT))
                 .build();
 
-        history.add(0, response);
+        saveExecution("analysis", request.getData(), request.isEnableSearch(), response);
         return response;
     }
 
-    @GetMapping("/history")
+    @GetMapping({"/api/executions", "/history"})
     public List<WorkflowResponse> history() {
-        return Collections.unmodifiableList(history);
+        return executionRepository.findTop50ByOrderByCreatedAtDesc().stream()
+                .map(this::toResponse)
+                .toList();
     }
 
-    // Builds callTree from per-node timing keys; only includes nodes where ms > 0.
-    // answerMs/defaultMs are reset to -1 per request so stale branch values are excluded.
+    private void saveExecution(String workflowType, String inputText, boolean enableSearch, WorkflowResponse response) {
+        WorkflowExecutionEntity entity = new WorkflowExecutionEntity();
+        entity.setWorkflowType(workflowType);
+        entity.setIntent(response.getIntent());
+        entity.setModel(response.getModel());
+        entity.setProvider(response.getProvider());
+        entity.setEnableSearch(enableSearch);
+        entity.setCostMs(response.getCostMs());
+        entity.setCreatedAt(LocalDateTime.now());
+        entity.setInputText(inputText);
+        entity.setAnswer(response.getAnswer());
+        entity.setNodeTimings(response.getNodeTimings());
+        entity.setCallTreeJson(toJson(response.getCallTree()));
+        executionRepository.save(entity);
+    }
+
+    private WorkflowResponse toResponse(WorkflowExecutionEntity entity) {
+        return WorkflowResponse.builder()
+                .answer(entity.getAnswer())
+                .intent(entity.getIntent())
+                .model(entity.getModel())
+                .provider(entity.getProvider())
+                .nodeTimings(entity.getNodeTimings())
+                .callTree(fromJson(entity.getCallTreeJson()))
+                .costMs(entity.getCostMs())
+                .timestamp(entity.getCreatedAt().format(FMT))
+                .build();
+    }
+
+    private String toJson(List<Map<String, Object>> callTree) {
+        try {
+            return objectMapper.writeValueAsString(callTree == null ? List.of() : callTree);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("调用树序列化失败", ex);
+        }
+    }
+
+    private List<Map<String, Object>> fromJson(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            List<Map<String, Object>> callTree = objectMapper.readValue(json, CALL_TREE_TYPE);
+            return callTree.isEmpty() ? null : callTree;
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
     private List<Map<String, Object>> buildWorkflowCallTree(OverAllState s) {
         if (s == null) return null;
         List<Map<String, Object>> tree = new ArrayList<>();
-        addNode(s, "intentMs",  "intent",  "分类", 0, tree);
-        addNode(s, "answerMs",  "answer",  "生成", 1, tree);
+        addNode(s, "intentMs", "intent", "分类", 0, tree);
+        addNode(s, "answerMs", "answer", "生成", 1, tree);
         addNode(s, "defaultMs", "default", "拦截", 1, tree);
         return tree.isEmpty() ? null : tree;
     }
@@ -139,9 +195,9 @@ public class GraphController {
     private List<Map<String, Object>> buildAnalysisCallTree(OverAllState s) {
         if (s == null) return null;
         List<Map<String, Object>> tree = new ArrayList<>();
-        addNode(s, "typeMs",     "type",     "分类", 0, tree);
+        addNode(s, "typeMs", "type", "分类", 0, tree);
         addNode(s, "analysisMs", "analysis", "分析", 1, tree);
-        addNode(s, "summaryMs",  "summary",  "汇总", 2, tree);
+        addNode(s, "summaryMs", "summary", "汇总", 2, tree);
         return tree.isEmpty() ? null : tree;
     }
 
@@ -151,11 +207,11 @@ public class GraphController {
             long ms = ((Number) v).longValue();
             if (ms > 0) {
                 tree.add(Map.<String, Object>of(
-                        "nodeId",   nodeId,
+                        "nodeId", nodeId,
                         "nodeType", nodeType,
-                        "costMs",   ms,
-                        "depth",    depth,
-                        "status",   "success"
+                        "costMs", ms,
+                        "depth", depth,
+                        "status", "success"
                 ));
             }
         });
@@ -165,7 +221,7 @@ public class GraphController {
         if (s == null) return "";
         List<String> parts = new ArrayList<>();
         for (int i = 0; i + 1 < msKeyLabelPairs.length; i += 2) {
-            String key   = msKeyLabelPairs[i];
+            String key = msKeyLabelPairs[i];
             String label = msKeyLabelPairs[i + 1];
             s.value(key).ifPresent(v -> {
                 long ms = ((Number) v).longValue();
@@ -173,5 +229,9 @@ public class GraphController {
             });
         }
         return String.join(" | ", parts);
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 }

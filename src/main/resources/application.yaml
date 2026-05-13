@@ -3,6 +3,19 @@ spring:
     name: ai-workflow
   main:
     allow-bean-definition-overriding: true
+  datasource:
+    url: ${AIFLOW_DATASOURCE_URL:jdbc:h2:file:./data/aiflow;AUTO_SERVER=TRUE}
+    driver-class-name: org.h2.Driver
+    username: ${AIFLOW_DATASOURCE_USERNAME:sa}
+    password: ${AIFLOW_DATASOURCE_PASSWORD:}
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
   ai:
     dashscope:
       api-key: ${DASHSCOPE_API_KEY:your-dashscope-api-key-here}
