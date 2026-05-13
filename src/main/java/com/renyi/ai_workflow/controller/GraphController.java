@@ -13,11 +13,14 @@ import com.renyi.ai_workflow.model.WorkflowResponse;
 import com.renyi.ai_workflow.repository.WorkflowExecutionRepository;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -38,16 +41,22 @@ public class GraphController {
     private final CompiledGraph analysisGraph;
     private final WorkflowExecutionRepository executionRepository;
     private final ObjectMapper objectMapper;
+    private final String dashscopeApiKey;
+    private final String deepseekApiKey;
 
     public GraphController(
             @Qualifier("myWorkflowGraph") CompiledGraph workflowGraph,
             @Qualifier("analysisGraph") CompiledGraph analysisGraph,
             WorkflowExecutionRepository executionRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Value("${spring.ai.dashscope.api-key:}") String dashscopeApiKey,
+            @Value("${deepseek.api-key:}") String deepseekApiKey) {
         this.workflowGraph = workflowGraph;
         this.analysisGraph = analysisGraph;
         this.executionRepository = executionRepository;
         this.objectMapper = objectMapper;
+        this.dashscopeApiKey = dashscopeApiKey;
+        this.deepseekApiKey = deepseekApiKey;
     }
 
     @PostMapping("/api/workflows/chat/run")
@@ -55,6 +64,7 @@ public class GraphController {
         long start = System.currentTimeMillis();
         String model = defaultIfBlank(request.getModel(), "qwen-max");
         String provider = defaultIfBlank(request.getProvider(), "tongyi");
+        validateProviderKey(provider);
 
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("input", request.getMessage());
@@ -97,6 +107,7 @@ public class GraphController {
         long start = System.currentTimeMillis();
         String model = defaultIfBlank(request.getModel(), "qwen-max");
         String provider = defaultIfBlank(request.getProvider(), "tongyi");
+        validateProviderKey(provider);
 
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("data", request.getData());
@@ -231,7 +242,27 @@ public class GraphController {
         return String.join(" | ", parts);
     }
 
+    private void validateProviderKey(String provider) {
+        if ("deepseek".equals(provider)) {
+            if (isPlaceholderKey(deepseekApiKey, "your-deepseek-api-key-here")) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "DeepSeek API Key 未配置，请设置 DEEPSEEK_API_KEY 后重启服务");
+            }
+            return;
+        }
+        if (isPlaceholderKey(dashscopeApiKey, "your-dashscope-api-key-here")) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "通义千问 API Key 未配置，请设置 DASHSCOPE_API_KEY 后重启服务");
+        }
+    }
+
+    private boolean isPlaceholderKey(String value, String placeholder) {
+        return value == null || value.isBlank() || placeholder.equals(value);
+    }
+
     private String defaultIfBlank(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
     }
 }
+
+

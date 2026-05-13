@@ -8,6 +8,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.stream.Collectors;
 
@@ -22,6 +23,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiError.of("VALIDATION_ERROR", message, request.getRequestURI()));
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiError> handleResponseStatus(ResponseStatusException ex, HttpServletRequest request) {
+        String code = ex.getStatusCode().is4xxClientError() ? "REQUEST_ERROR" : "SERVICE_UNAVAILABLE";
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(ApiError.of(code, ex.getReason(), request.getRequestURI()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleException(Exception ex, HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -34,3 +42,4 @@ public class GlobalExceptionHandler {
                 : error.getDefaultMessage();
     }
 }
+
