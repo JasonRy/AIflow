@@ -5,7 +5,10 @@ import com.renyi.ai_workflow.dto.CreateAppRequest;
 import com.renyi.ai_workflow.dto.CreateWorkflowRequest;
 import com.renyi.ai_workflow.dto.SaveWorkflowDraftRequest;
 import com.renyi.ai_workflow.dto.WorkflowDefinitionResponse;
+import com.renyi.ai_workflow.dto.WorkflowDefinitionRunRequest;
+import com.renyi.ai_workflow.model.WorkflowResponse;
 import com.renyi.ai_workflow.service.WorkflowDefinitionService;
+import com.renyi.ai_workflow.service.WorkflowRuntimeService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,9 +26,11 @@ import java.util.List;
 @RequestMapping("/api")
 public class WorkflowDefinitionController {
     private final WorkflowDefinitionService service;
+    private final WorkflowRuntimeService runtimeService;
 
-    public WorkflowDefinitionController(WorkflowDefinitionService service) {
+    public WorkflowDefinitionController(WorkflowDefinitionService service, WorkflowRuntimeService runtimeService) {
         this.service = service;
+        this.runtimeService = runtimeService;
     }
 
     @PostMapping("/apps")
@@ -58,5 +63,12 @@ public class WorkflowDefinitionController {
             @PathVariable Long workflowId,
             @Valid @RequestBody SaveWorkflowDraftRequest request) {
         return service.saveDraft(workflowId, request);
+    }
+
+    @PostMapping("/workflow-definitions/{workflowId}/run")
+    public WorkflowResponse runWorkflow(
+            @PathVariable Long workflowId,
+            @Valid @RequestBody WorkflowDefinitionRunRequest request) {
+        return runtimeService.run(workflowId, request);
     }
 }

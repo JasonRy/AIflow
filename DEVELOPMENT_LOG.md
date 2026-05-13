@@ -98,3 +98,20 @@
 
 - Start the local database with `docker compose up -d postgres`.
 - Docker Desktop must be running before Compose can start the PostgreSQL container.
+
+## 2026-05-13 - Saved workflow runtime
+
+### Added
+
+- Added `POST /api/workflow-definitions/{workflowId}/run`.
+- Added a runtime service for saved workflow definitions.
+- First supported dynamic path: `start -> llm -> end`.
+- Added simple variable templating for LLM prompts, including `{{query}}`.
+- Saved definition-run outputs into PostgreSQL execution history with workflow type `definition`.
+- Added a workflow-page trial run input, run button, and result panel.
+
+### Verified
+
+- `./mvnw.cmd test` passes.
+- API smoke test returned `成功` for workflow `#1`.
+- PostgreSQL history contains the new `definition` execution record.

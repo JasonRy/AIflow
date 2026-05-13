@@ -148,6 +148,21 @@ Content-Type: application/json
   "variables": {}
 }
 ```
+
+```http
+POST /api/workflow-definitions/{workflowId}/run
+Content-Type: application/json
+
+{
+  "message": "只回复两个字：成功",
+  "provider": "tongyi",
+  "model": "qwen-turbo",
+  "enableSearch": false,
+  "variables": {
+    "query": "只回复两个字：成功"
+  }
+}
+```
 ## Persistence
 
 Execution history and workflow definitions are stored in the local Docker PostgreSQL database by default. Tests use an in-memory H2 database.
@@ -156,9 +171,10 @@ Execution history and workflow definitions are stored in the local Docker Postgr
 
 - Chat workflow execution with provider/model selection.
 - Data analysis workflow execution.
+- Saved `start -> llm -> end` workflow definition execution.
 - Node timing collection.
 - Simple call tree rendering.
-- In-memory execution history.
+- PostgreSQL-backed execution history.
 - Markdown, code block, and math rendering in responses.
 
 ## Roadmap Toward Dify-like Experience

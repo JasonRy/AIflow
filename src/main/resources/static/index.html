@@ -141,6 +141,7 @@ header { background: #1a1a2e; color: #fff; padding: 14px 24px; font-size: 18px; 
 .workflow-actions button, .workflow-form .wide-btn { padding: 9px 12px; border: none; border-radius: 8px; background: #1a1a2e; color: #fff; font-size: 13px; cursor: pointer; }
 .workflow-actions button.secondary { background: #eef2f7; color: #1f2937; border: 1px solid #d6dde8; }
 .workflow-actions button:disabled, .workflow-form .wide-btn:disabled { background: #aaa; cursor: not-allowed; }
+.workflow-run-result { background: #f6f8fb; border: 1px solid #e3e8ef; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.6; color: #333; min-height: 42px; max-height: 180px; overflow-y: auto; }
 .workflow-status { min-height: 20px; font-size: 12px; color: #607d8b; line-height: 1.5; }
 .workflow-status.error { color: #c62828; }
 .workflow-result { min-width: 0; overflow-y: auto; padding: 18px; display: grid; grid-template-rows: auto 1fr; gap: 14px; }
@@ -233,6 +234,11 @@ header { background: #1a1a2e; color: #fff; padding: 14px 24px; font-size: 18px; 
             <button class="secondary" onclick="loadWorkflowDefinitions()">刷新列表</button>
           </div>
           <button class="wide-btn" id="saveDraftBtn" onclick="saveSampleDraft()" disabled>保存示例草稿</button>
+          <label>试运行输入
+            <textarea id="workflowRunInput">请用一句话介绍这个工作流。</textarea>
+          </label>
+          <button class="wide-btn" id="runWorkflowBtn" onclick="runCurrentWorkflow()" disabled>运行当前工作流</button>
+          <div class="workflow-run-result" id="workflowRunResult">运行结果将在这里显示。</div>
           <div class="workflow-status" id="workflowStatus">先创建示例，再保存草稿。</div>
         </div>
         <div class="workflow-result">
@@ -381,6 +387,8 @@ const workflowStatus = document.getElementById('workflowStatus');
 const workflowCanvas = document.getElementById('workflowCanvas');
 const workflowSummary = document.getElementById('workflowSummary');
 const saveDraftBtn = document.getElementById('saveDraftBtn');
+const runWorkflowBtn = document.getElementById('runWorkflowBtn');
+const workflowRunResult = document.getElementById('workflowRunResult');
 
 const PROVIDER_MODELS = {
   tongyi:   ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen-long'],
@@ -398,7 +406,7 @@ const getModel        = () => modelSelect.value;
 const getEnableSearch = () => searchToggle.checked;
 
 /* ── 调用树 ── */
-const NODE_ICONS = { '分类':'⊕', '生成':'⊞', '拦截':'⊘', '分析':'⊙', '汇总':'⊟' };
+const NODE_ICONS = { '分类':'⊕', '生成':'⊞', '拦截':'⊘', '分析':'⊙', '汇总':'⊟', 'start':'▶', 'llm':'✦', 'end':'■' };
 
 function renderCallTree(nodes, container) {
   if (!nodes || !nodes.length) return;
@@ -606,6 +614,7 @@ async function createWorkflowDemo() {
     currentWorkflowId = workflow.id;
     currentWorkflow = workflow;
     saveDraftBtn.disabled = false;
+    runWorkflowBtn.disabled = false;
     renderWorkflow(workflow);
     setWorkflowStatus(`已创建工作流 #${workflow.id}，可以保存示例草稿。`);
   } catch (e) {
@@ -637,8 +646,9 @@ async function saveSampleDraft() {
       body: JSON.stringify(body)
     });
     currentWorkflow = workflow;
+    runWorkflowBtn.disabled = false;
     renderWorkflow(workflow);
-    setWorkflowStatus(`草稿已保存：${workflow.nodes.length} 个节点，${workflow.edges.length} 条连线。`);
+    setWorkflowStatus(`草稿已保存：${workflow.nodes.length} 个节点，${workflow.edges.length} 条连线，可以试运行。`);
   } catch (e) {
     setWorkflowStatus(e.message || '保存失败', true);
   } finally {
@@ -656,10 +666,41 @@ async function loadWorkflowDefinitions() {
     currentWorkflowId = currentWorkflowId || list[0].id;
     currentWorkflow = await apiJson(`/api/workflow-definitions/${currentWorkflowId}`);
     saveDraftBtn.disabled = false;
+    runWorkflowBtn.disabled = false;
     renderWorkflow(currentWorkflow);
     setWorkflowStatus(`已加载 ${list.length} 个工作流，当前 #${currentWorkflowId}。`);
   } catch (e) {
     setWorkflowStatus(e.message || '加载失败', true);
+  }
+}
+
+async function runCurrentWorkflow() {
+  if (!currentWorkflowId) return;
+  const text = document.getElementById('workflowRunInput').value.trim();
+  if (!text) return;
+  runWorkflowBtn.disabled = true;
+  workflowRunResult.textContent = '运行中...';
+  setWorkflowStatus(`正在运行工作流 #${currentWorkflowId}...`);
+  try {
+    const result = await apiJson(`/api/workflow-definitions/${currentWorkflowId}/run`, {
+      method: 'POST',
+      body: JSON.stringify({
+        message: text,
+        provider: getProvider(),
+        model: getModel(),
+        enableSearch: getEnableSearch(),
+        variables: { query: text }
+      })
+    });
+    workflowRunResult.innerHTML = '';
+    renderMarkdown(result.answer || '无输出', workflowRunResult);
+    setWorkflowStatus(`运行完成，耗时 ${result.costMs}ms。`);
+    loadHistory();
+  } catch (e) {
+    workflowRunResult.textContent = e.message || '运行失败';
+    setWorkflowStatus(e.message || '运行失败', true);
+  } finally {
+    runWorkflowBtn.disabled = false;
   }
 }
 
@@ -702,7 +743,7 @@ async function loadHistory() {
     historyList.innerHTML = list.map(r => {
       const cls = r.intent === '数据分析' || r.workflowType === 'analysis' ? 'intent-数据分析'
                 : r.intent?.includes('问题') ? 'intent-问题' : 'intent-other';
-      const typeLabel = r.workflowType === 'analysis' ? '数据分析' : '对话';
+      const typeLabel = r.workflowType === 'analysis' ? '数据分析' : r.workflowType === 'definition' ? '工作流' : '对话';
       const providerLabel = r.provider === 'deepseek' ? 'DeepSeek' : '通义';
       return `<div class="record">
         <div class="record-time"><span>${r.timestamp}</span><span>#${r.id || ''}</span></div>
