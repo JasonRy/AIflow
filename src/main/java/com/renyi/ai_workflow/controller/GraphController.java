@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renyi.ai_workflow.dto.AnalysisRunRequest;
+import com.renyi.ai_workflow.dto.ExecutionHistoryResponse;
 import com.renyi.ai_workflow.dto.WorkflowRunRequest;
 import com.renyi.ai_workflow.entity.WorkflowExecutionEntity;
 import com.renyi.ai_workflow.model.WorkflowResponse;
@@ -141,9 +142,9 @@ public class GraphController {
     }
 
     @GetMapping({"/api/executions", "/history"})
-    public List<WorkflowResponse> history() {
+    public List<ExecutionHistoryResponse> history() {
         return executionRepository.findTop50ByOrderByCreatedAtDesc().stream()
-                .map(this::toResponse)
+                .map(this::toHistoryResponse)
                 .toList();
     }
 
@@ -169,6 +170,23 @@ public class GraphController {
                 .intent(entity.getIntent())
                 .model(entity.getModel())
                 .provider(entity.getProvider())
+                .nodeTimings(entity.getNodeTimings())
+                .callTree(fromJson(entity.getCallTreeJson()))
+                .costMs(entity.getCostMs())
+                .timestamp(entity.getCreatedAt().format(FMT))
+                .build();
+    }
+
+    private ExecutionHistoryResponse toHistoryResponse(WorkflowExecutionEntity entity) {
+        return ExecutionHistoryResponse.builder()
+                .id(entity.getId())
+                .workflowType(entity.getWorkflowType())
+                .userMessage(entity.getInputText())
+                .assistantMessage(entity.getAnswer())
+                .intent(entity.getIntent())
+                .model(entity.getModel())
+                .provider(entity.getProvider())
+                .enableSearch(entity.isEnableSearch())
                 .nodeTimings(entity.getNodeTimings())
                 .callTree(fromJson(entity.getCallTreeJson()))
                 .costMs(entity.getCostMs())

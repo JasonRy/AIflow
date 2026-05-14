@@ -79,3 +79,57 @@
 - Build dynamic runtime execution from saved workflow definitions.
 - Add node type contracts for `start`, `llm`, `condition`, `code`, `http`, `set_variable`, and `end`.
 - Start replacing the single-page static UI with workflow list/detail/editor views.
+
+## 2026-05-13 - Conversation history and Docker database
+
+### Added
+
+- Created and pushed the remote `develop` branch.
+- Changed the right-side execution panel into a chat-style conversation history panel.
+- Added `ExecutionHistoryResponse` so history responses include user input and assistant output.
+- Added Docker Compose PostgreSQL configuration:
+  - service: `postgres`
+  - container: `aiflow-postgres`
+  - database: `aiflow`
+- Switched the default application datasource to PostgreSQL.
+- Added test-only H2 configuration under `src/test/resources/application.yaml`.
+
+### Notes
+
+- Start the local database with `docker compose up -d postgres`.
+- Docker Desktop must be running before Compose can start the PostgreSQL container.
+
+## 2026-05-13 - Saved workflow runtime
+
+### Added
+
+- Added `POST /api/workflow-definitions/{workflowId}/run`.
+- Added a runtime service for saved workflow definitions.
+- First supported dynamic path: `start -> llm -> end`.
+- Added simple variable templating for LLM prompts, including `{{query}}`.
+- Saved definition-run outputs into PostgreSQL execution history with workflow type `definition`.
+- Added a workflow-page trial run input, run button, and result panel.
+
+### Verified
+
+- `./mvnw.cmd test` passes.
+- API smoke test returned `成功` for workflow `#1`.
+- PostgreSQL history contains the new `definition` execution record.
+
+## 2026-05-13 - Dify-like workflow node runtime
+
+### Added
+
+- Restyled execution call trees toward a Dify-like trace view.
+- Added persisted `callTree` data to execution history responses.
+- Added dynamic runtime support for saved workflow `condition` nodes.
+- Added dynamic runtime support for saved workflow `set_variable` nodes.
+- Added a web UI branch draft demo:
+  - `start -> condition`
+  - `true/false -> set_variable`
+  - `set_variable -> llm -> end`
+
+### Notes
+
+- Condition nodes currently support string operators such as `contains`, `equals`, `not_equals`, `empty`, and `not_empty`.
+- Branch routing prefers outgoing edge `sourceHandle` values such as `true` and `false`.

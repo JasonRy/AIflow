@@ -37,6 +37,28 @@ Open:
 http://localhost:8080
 ```
 
+## Local Database
+
+AIflow uses PostgreSQL for local persistence by default. Start the database with Docker:
+
+```powershell
+docker compose up -d postgres
+```
+
+Default connection:
+
+```text
+jdbc:postgresql://localhost:5432/aiflow
+username: aiflow
+password: aiflow_dev_password
+```
+
+Then start the app:
+
+```powershell
+./mvnw.cmd spring-boot:run
+```
+
 ## Useful Commands
 
 ```powershell
@@ -126,29 +148,33 @@ Content-Type: application/json
   "variables": {}
 }
 ```
+
+```http
+POST /api/workflow-definitions/{workflowId}/run
+Content-Type: application/json
+
+{
+  "message": "只回复两个字：成功",
+  "provider": "tongyi",
+  "model": "qwen-turbo",
+  "enableSearch": false,
+  "variables": {
+    "query": "只回复两个字：成功"
+  }
+}
+```
 ## Persistence
 
-Execution history is stored in an H2 database under `./data/aiflow` by default. The `data/` directory is ignored by git.
-
-The H2 console is enabled for local development:
-
-```text
-http://localhost:8080/h2-console
-```
-
-Default JDBC URL:
-
-```text
-jdbc:h2:file:./data/aiflow;AUTO_SERVER=TRUE
-```
+Execution history and workflow definitions are stored in the local Docker PostgreSQL database by default. Tests use an in-memory H2 database.
 
 ## Current Features
 
 - Chat workflow execution with provider/model selection.
 - Data analysis workflow execution.
+- Saved workflow definition execution for `start`, `condition`, `set_variable`, `llm`, and `end` nodes.
 - Node timing collection.
 - Simple call tree rendering.
-- In-memory execution history.
+- PostgreSQL-backed execution history.
 - Markdown, code block, and math rendering in responses.
 
 ## Roadmap Toward Dify-like Experience
@@ -157,7 +183,7 @@ jdbc:h2:file:./data/aiflow;AUTO_SERVER=TRUE
 - Replace fixed Java-defined graphs with a workflow JSON DSL.
 - Add POST JSON APIs and structured error responses.
 - Build a visual workflow editor with configurable node panels.
-- Add variable mapping, branch conditions, loop support, tool nodes, and knowledge retrieval nodes.
+- Add code, HTTP, loop, tool, and knowledge retrieval nodes.
 - Add workflow versioning, publish/run separation, and debug traces.
 
 
