@@ -3,6 +3,9 @@ package com.renyi.ai_workflow.dto;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+import java.util.Map;
+
 @Data
 @Builder
 public class ExecutionHistoryResponse {
@@ -15,6 +18,7 @@ public class ExecutionHistoryResponse {
     private String provider;
     private boolean enableSearch;
     private String nodeTimings;
+    private List<Map<String, Object>> callTree;
     private long costMs;
     private String timestamp;
 }

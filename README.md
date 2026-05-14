@@ -171,7 +171,7 @@ Execution history and workflow definitions are stored in the local Docker Postgr
 
 - Chat workflow execution with provider/model selection.
 - Data analysis workflow execution.
-- Saved `start -> llm -> end` workflow definition execution.
+- Saved workflow definition execution for `start`, `condition`, `set_variable`, `llm`, and `end` nodes.
 - Node timing collection.
 - Simple call tree rendering.
 - PostgreSQL-backed execution history.
@@ -183,7 +183,7 @@ Execution history and workflow definitions are stored in the local Docker Postgr
 - Replace fixed Java-defined graphs with a workflow JSON DSL.
 - Add POST JSON APIs and structured error responses.
 - Build a visual workflow editor with configurable node panels.
-- Add variable mapping, branch conditions, loop support, tool nodes, and knowledge retrieval nodes.
+- Add code, HTTP, loop, tool, and knowledge retrieval nodes.
 - Add workflow versioning, publish/run separation, and debug traces.
 
 

@@ -228,6 +228,19 @@ header { background: #1a1a2e; color: #fff; padding: 14px 24px; font-size: 18px; 
 .workflow-json { margin: 0; border-top: 1px solid #e3e8ef; background: #0d1117; color: #c9d1d9; padding: 12px; font-size: 11px; line-height: 1.55; overflow-x: auto; max-height: 260px; }
 @media (max-width: 1180px) { .workflow-board { grid-template-columns: 280px minmax(380px, 1fr); } .workflow-inspector { display: none; } }
 @media (max-width: 900px) { .workflow-board { grid-template-columns: 1fr; } .workflow-form { border-right: none; border-bottom: 1px solid #e0e0e0; } .workflow-canvas-panel { min-height: 520px; } }
+.workflow-node-port { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid #b0bec5; z-index: 10; box-shadow: 0 1px 4px rgba(0,0,0,0.15); opacity: 0; transition: opacity 0.15s, background 0.15s, border-color 0.15s; pointer-events: auto; }
+.workflow-node:hover .workflow-node-port, .workflow-node.selected .workflow-node-port { opacity: 1; }
+.workflow-node-port-out { right: -6px; top: 50%; transform: translateY(-50%); cursor: crosshair; }
+.workflow-node-port-out.port-true { top: 25%; }
+.workflow-node-port-out.port-false { top: 75%; }
+.workflow-node-port-in { left: -6px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.workflow-node-port-out:hover { background: #1a73e8; border-color: #1a73e8; }
+.workflow-node.drop-target { border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.25) !important; }
+.workflow-node.drop-target .workflow-node-port-in { opacity: 1; background: #22c55e; border-color: #22c55e; }
+.workflow-edge-temp { stroke: #1a73e8; stroke-width: 2; fill: none; stroke-dasharray: 8 4; pointer-events: none; }
+.workflow-edge-group { pointer-events: auto; }
+.workflow-edge-group:hover .workflow-edge { stroke: #ef4444; stroke-width: 2.5; }
+.workflow-edge-hit { stroke: transparent; stroke-width: 16; fill: none; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -324,7 +337,7 @@ header { background: #1a1a2e; color: #fff; padding: 14px 24px; font-size: 18px; 
               <span>为后续步骤准备风格或要求。</span>
             </button>
           </div>
-          <div class="workflow-section-note">先新建流程，再选择模板或添加步骤。点击画布步骤可在右侧编辑。</div>
+          <div class="workflow-section-note">可以直接添加步骤，系统会自动准备一个流程。点击画布步骤可在右侧编辑。</div>
         </div>
         <div class="workflow-canvas-panel">
           <div class="workflow-canvas-toolbar">
@@ -735,6 +748,148 @@ async function runAnalysis() {
 let currentWorkflowId = null;
 let currentWorkflow = null;
 let selectedWorkflowNodeKey = null;
+let edgeDragState = null;
+let nodeDragState = null;
+
+function startNodeDrag(event, nodeKey) {
+  if (event.button !== 0) return;
+  if (event.target.closest('.workflow-node-port, .workflow-node-delete')) return;
+  const node = (currentWorkflow?.nodes || []).find(n => n.key === nodeKey);
+  if (!node) return;
+  selectedWorkflowNodeKey = nodeKey;
+  nodeDragState = {
+    nodeKey,
+    startX: event.clientX,
+    startY: event.clientY,
+    nodeX: Number(node.x || 0),
+    nodeY: Number(node.y || 0),
+    moved: false
+  };
+  document.addEventListener('mousemove', onNodeDragMove);
+  document.addEventListener('mouseup', onNodeDragEnd);
+}
+
+function onNodeDragMove(event) {
+  if (!nodeDragState || !currentWorkflow) return;
+  const node = currentWorkflow.nodes.find(n => n.key === nodeDragState.nodeKey);
+  if (!node) return;
+  const dx = event.clientX - nodeDragState.startX;
+  const dy = event.clientY - nodeDragState.startY;
+  if (Math.abs(dx) + Math.abs(dy) > 3) nodeDragState.moved = true;
+  node.x = Math.max(0, Math.round(nodeDragState.nodeX + dx));
+  node.y = Math.max(0, Math.round(nodeDragState.nodeY + dy));
+  renderWorkflow(currentWorkflow);
+}
+
+function onNodeDragEnd() {
+  if (nodeDragState?.moved) {
+    setWorkflowStatus('已调整步骤位置，记得保存流程设置。');
+  }
+  nodeDragState = null;
+  document.removeEventListener('mousemove', onNodeDragMove);
+  document.removeEventListener('mouseup', onNodeDragEnd);
+}
+
+function startEdgeDrag(event, sourceKey, sourceHandle) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!currentWorkflow) return;
+  const canvas = workflowCanvas;
+  const svg = canvas.querySelector('.workflow-edges');
+  if (!svg) return;
+
+  const nodes = currentWorkflow.nodes || [];
+  const nodeWidth = 176, nodeHeight = 78, padding = 44;
+  const minX = nodes.length ? Math.min(...nodes.map(n => Number(n.x || 0))) : 0;
+  const minY = nodes.length ? Math.min(...nodes.map(n => Number(n.y || 0))) : 0;
+  const sourceNode = nodes.find(n => n.key === sourceKey);
+  if (!sourceNode) return;
+
+  const sourceLeft = Number(sourceNode.x || 0) - minX + padding;
+  const sourceTop = Number(sourceNode.y || 0) - minY + padding;
+  const x1 = sourceLeft + nodeWidth;
+  const isCondition = sourceNode.type === 'condition';
+  const y1 = sourceTop + nodeHeight / 2
+    + (isCondition && sourceHandle === 'true' ? -nodeHeight * 0.2
+      : isCondition && sourceHandle === 'false' ? nodeHeight * 0.2 : 0);
+
+  const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  tempPath.setAttribute('class', 'workflow-edge-temp');
+  svg.appendChild(tempPath);
+
+  edgeDragState = { sourceKey, sourceHandle: sourceHandle || null, tempPath, svg, x1, y1 };
+  document.addEventListener('mousemove', onEdgeDragMove);
+  document.addEventListener('mouseup', onEdgeDragEnd);
+}
+
+function getViewportMousePos(event) {
+  const canvas = workflowCanvas;
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left + canvas.scrollLeft - 24,
+    y: event.clientY - rect.top + canvas.scrollTop - 24
+  };
+}
+
+function onEdgeDragMove(event) {
+  if (!edgeDragState) return;
+  const { x1, y1, tempPath } = edgeDragState;
+  const { x: x2, y: y2 } = getViewportMousePos(event);
+  const midX = Math.max(x1 + 28, x1 + (x2 - x1) / 2);
+  tempPath.setAttribute('d', `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`);
+
+  document.querySelectorAll('.workflow-node.drop-target').forEach(el => el.classList.remove('drop-target'));
+  const mx = event.clientX, my = event.clientY;
+  for (const nodeEl of document.querySelectorAll('.workflow-node[data-node-key]')) {
+    const r = nodeEl.getBoundingClientRect();
+    if (mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom) {
+      const targetKey = nodeEl.dataset.nodeKey;
+      if (targetKey && targetKey !== edgeDragState.sourceKey) {
+        const targetNode = (currentWorkflow?.nodes || []).find(n => n.key === targetKey);
+        if (targetNode?.type !== 'start') { nodeEl.classList.add('drop-target'); }
+      }
+      break;
+    }
+  }
+}
+
+function onEdgeDragEnd(event) {
+  if (!edgeDragState) return;
+  const { sourceKey, sourceHandle, tempPath, svg } = edgeDragState;
+  edgeDragState = null;
+  svg.removeChild(tempPath);
+  document.removeEventListener('mousemove', onEdgeDragMove);
+  document.removeEventListener('mouseup', onEdgeDragEnd);
+
+  const dropTargetEl = document.querySelector('.workflow-node.drop-target');
+  document.querySelectorAll('.workflow-node.drop-target').forEach(el => el.classList.remove('drop-target'));
+  if (!dropTargetEl) return;
+
+  const targetKey = dropTargetEl.dataset.nodeKey;
+  if (!targetKey || targetKey === sourceKey) return;
+  const targetNode = (currentWorkflow?.nodes || []).find(n => n.key === targetKey);
+  if (!targetNode || targetNode.type === 'start') return;
+
+  const exists = (currentWorkflow.edges || []).some(e =>
+    e.source === sourceKey && e.target === targetKey && (e.sourceHandle || null) === (sourceHandle || null)
+  );
+  if (exists) { setWorkflowStatus('这两个步骤之间已存在相同的连接。', true); return; }
+
+  currentWorkflow.edges = currentWorkflow.edges || [];
+  currentWorkflow.edges.push({ source: sourceKey, target: targetKey, sourceHandle: sourceHandle || null, targetHandle: null, condition: {} });
+  renderWorkflow(currentWorkflow);
+  setWorkflowStatus('已连接步骤，记得保存流程设置。');
+}
+
+function deleteWorkflowEdge(source, target, sourceHandle) {
+  if (!currentWorkflow) return;
+  const sh = sourceHandle || null;
+  currentWorkflow.edges = (currentWorkflow.edges || []).filter(e =>
+    !(e.source === source && e.target === target && (e.sourceHandle || null) === sh)
+  );
+  renderWorkflow(currentWorkflow);
+  setWorkflowStatus('已删除连线，记得保存流程设置。');
+}
 
 async function apiJson(url, options = {}) {
   const res = await fetch(url, {
@@ -929,11 +1084,9 @@ function editableWorkflowPayload() {
   return { nodes, edges, variables: currentWorkflow.variables || {} };
 }
 
-function addWorkflowStep(type) {
-  if (!currentWorkflowId || !currentWorkflow) {
-    setWorkflowStatus('请先新建流程，再添加步骤。', true);
-    return;
-  }
+async function addWorkflowStep(type) {
+  await ensureWorkflowReady();
+  if (!currentWorkflowId || !currentWorkflow) return;
   currentWorkflow.nodes = currentWorkflow.nodes || [];
   currentWorkflow.edges = currentWorkflow.edges || [];
   const node = createWorkflowStep(type);
@@ -968,6 +1121,36 @@ function addWorkflowStep(type) {
   selectedWorkflowNodeKey = node.key;
   renderWorkflow(currentWorkflow);
   setWorkflowStatus(`已添加步骤「${node.title}」，记得保存流程设置。`);
+}
+
+async function ensureWorkflowReady() {
+  if (currentWorkflowId && currentWorkflow) return;
+  setWorkflowStatus('正在准备新流程...');
+  try {
+    const app = await apiJson('/api/apps', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: document.getElementById('workflowAppName').value.trim() || '测试应用',
+        description: document.getElementById('workflowAppDesc').value.trim()
+      })
+    });
+    const workflow = await apiJson('/api/workflow-definitions', {
+      method: 'POST',
+      body: JSON.stringify({
+        appId: app.id,
+        name: document.getElementById('workflowName').value.trim() || '新流程',
+        description: document.getElementById('workflowDesc').value.trim()
+      })
+    });
+    currentWorkflowId = workflow.id;
+    currentWorkflow = workflow;
+    saveDraftBtn.disabled = false;
+    saveBranchDraftBtn.disabled = false;
+    saveCurrentDraftBtn.disabled = false;
+    runWorkflowBtn.disabled = false;
+  } catch (e) {
+    setWorkflowStatus(e.message || '新建流程失败', true);
+  }
 }
 
 function deleteWorkflowNode(key) {
@@ -1090,17 +1273,25 @@ function renderWorkflow(workflow) {
     const source = byKey.get(edge.source);
     const target = byKey.get(edge.target);
     if (!source || !target) return '';
+    const isCondSrc = source.type === 'condition';
     const x1 = source.left + nodeWidth;
-    const y1 = source.top + nodeHeight / 2;
+    const y1 = source.top + nodeHeight / 2 + (isCondSrc && edge.sourceHandle === 'true' ? -nodeHeight * 0.2 : isCondSrc && edge.sourceHandle === 'false' ? nodeHeight * 0.2 : 0);
     const x2 = target.left;
     const y2 = target.top + nodeHeight / 2;
     const midX = Math.max(x1 + 28, x1 + (x2 - x1) / 2);
     const label = edge.sourceHandle || '';
     const labelX = (x1 + x2) / 2;
     const labelY = (y1 + y2) / 2 - 6;
+    const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+    const src = escapeAttr(edge.source);
+    const tgt = escapeAttr(edge.target);
+    const hdl = escapeAttr(edge.sourceHandle || '');
     return `
-      <path class="workflow-edge" d="M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}"></path>
-      ${label ? `<text class="workflow-edge-label" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>` : ''}
+      <g class="workflow-edge-group" onclick="deleteWorkflowEdge('${src}','${tgt}','${hdl}')" title="点击删除此连线">
+        <path class="workflow-edge" d="${d}"></path>
+        <path class="workflow-edge-hit" d="${d}"></path>
+        ${label ? `<text class="workflow-edge-label" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>` : ''}
+      </g>
     `;
   }).join('');
 
@@ -1109,9 +1300,16 @@ function renderWorkflow(workflow) {
     const deleteBtn = node.type !== 'start'
       ? `<button class="workflow-node-delete" title="删除步骤" onclick="event.stopPropagation();deleteWorkflowNode('${escapeAttr(node.key)}')">✕</button>`
       : '';
+    const inPort = node.type !== 'start'
+      ? `<div class="workflow-node-port workflow-node-port-in" title="输入连接点"></div>`
+      : '';
+    const outPorts = node.type === 'end' ? '' : node.type === 'condition'
+      ? `<div class="workflow-node-port workflow-node-port-out port-true" title="拖动连接 True 分支" onmousedown="startEdgeDrag(event,'${escapeAttr(node.key)}','true')" onclick="event.stopPropagation()"></div>
+         <div class="workflow-node-port workflow-node-port-out port-false" title="拖动连接 False 分支" onmousedown="startEdgeDrag(event,'${escapeAttr(node.key)}','false')" onclick="event.stopPropagation()"></div>`
+      : `<div class="workflow-node-port workflow-node-port-out" title="拖动以连接下一步骤" onmousedown="startEdgeDrag(event,'${escapeAttr(node.key)}',null)" onclick="event.stopPropagation()"></div>`;
     return `
-      <div class="workflow-node ${node.key === selectedWorkflowNodeKey ? 'selected' : ''}" style="left:${node.left}px;top:${node.top}px" onclick="selectWorkflowNode('${escapeAttr(node.key)}')">
-        ${deleteBtn}
+      <div class="workflow-node ${node.key === selectedWorkflowNodeKey ? 'selected' : ''}" data-node-key="${escapeAttr(node.key)}" style="left:${node.left}px;top:${node.top}px" onmousedown="startNodeDrag(event,'${escapeAttr(node.key)}')" onclick="selectWorkflowNode('${escapeAttr(node.key)}')">
+        ${deleteBtn}${inPort}${outPorts}
         <div class="workflow-node-head">
           <span class="workflow-node-icon ${escapeAttr(meta.cls)}">${escapeHtml(meta.icon)}</span>
           <div class="workflow-node-title">${escapeHtml(node.title || node.key)}</div>
@@ -1436,6 +1634,3 @@ loadHistory();
 </script>
 </body>
 </html>
-
-
-
