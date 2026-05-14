@@ -115,3 +115,21 @@
 - `./mvnw.cmd test` passes.
 - API smoke test returned `成功` for workflow `#1`.
 - PostgreSQL history contains the new `definition` execution record.
+
+## 2026-05-13 - Dify-like workflow node runtime
+
+### Added
+
+- Restyled execution call trees toward a Dify-like trace view.
+- Added persisted `callTree` data to execution history responses.
+- Added dynamic runtime support for saved workflow `condition` nodes.
+- Added dynamic runtime support for saved workflow `set_variable` nodes.
+- Added a web UI branch draft demo:
+  - `start -> condition`
+  - `true/false -> set_variable`
+  - `set_variable -> llm -> end`
+
+### Notes
+
+- Condition nodes currently support string operators such as `contains`, `equals`, `not_equals`, `empty`, and `not_empty`.
+- Branch routing prefers outgoing edge `sourceHandle` values such as `true` and `false`.

@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -138,7 +139,7 @@ public class WorkflowRuntimeService {
                     "status", "success"
             ));
 
-            currentKey = nextNodeKey(currentKey, edges);
+            currentKey = nextNodeKey(currentKey, edges, nodeOutput);
         }
 
         String provider = resolveProvider(request.getProvider(), null);
@@ -166,6 +167,8 @@ public class WorkflowRuntimeService {
         return switch (node.getNodeType()) {
             case "start" -> request.getMessage();
             case "llm" -> runLlmNode(config, variables, request);
+            case "condition" -> runConditionNode(config, variables);
+            case "set_variable", "setvariable" -> runSetVariableNode(config, variables);
             case "end" -> valueAsString(variables.getOrDefault("answer", variables.getOrDefault("query", "")), "");
             default -> throw badRequest("暂不支持节点类型: " + node.getNodeType());
         };
@@ -190,6 +193,63 @@ public class WorkflowRuntimeService {
         return answer;
     }
 
+    @SuppressWarnings("unchecked")
+    private String runSetVariableNode(Map<String, Object> config, Map<String, Object> variables) {
+        Object assignments = config.get("assignments");
+        if (assignments instanceof List<?> list) {
+            List<String> names = new ArrayList<>();
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> assignment) {
+                    String name = valueAsString(firstPresent(assignment, "name", "key", "variable"), "").trim();
+                    if (!name.isBlank()) {
+                        Object rawValue = firstPresent(assignment, "value", "template");
+                        String value = renderTemplate(valueAsString(rawValue, ""), variables);
+                        variables.put(name, value);
+                        names.add(name);
+                    }
+                }
+            }
+            return String.join(",", names);
+        }
+
+        Object values = config.get("variables");
+        if (values instanceof Map<?, ?> map) {
+            List<String> names = new ArrayList<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String name = valueAsString(entry.getKey(), "").trim();
+                if (!name.isBlank()) {
+                    String value = renderTemplate(valueAsString(entry.getValue(), ""), variables);
+                    variables.put(name, value);
+                    names.add(name);
+                }
+            }
+            return String.join(",", names);
+        }
+        throw badRequest("set_variable 节点缺少 assignments 或 variables 配置");
+    }
+
+    private String runConditionNode(Map<String, Object> config, Map<String, Object> variables) {
+        String variable = valueAsString(firstPresent(config, "variable", "key", "left"), "query");
+        String operator = valueAsString(config.get("operator"), "not_empty");
+        String expected = renderTemplate(valueAsString(config.get("value"), ""), variables);
+        String actual = valueAsString(variables.get(variable), "");
+        return evaluateCondition(actual, operator, expected) ? "true" : "false";
+    }
+
+    private boolean evaluateCondition(String actual, String operator, String expected) {
+        return switch (operator) {
+            case "equals", "eq", "==" -> Objects.equals(actual, expected);
+            case "not_equals", "ne", "!=" -> !Objects.equals(actual, expected);
+            case "contains" -> actual.contains(expected);
+            case "not_contains" -> !actual.contains(expected);
+            case "starts_with" -> actual.startsWith(expected);
+            case "ends_with" -> actual.endsWith(expected);
+            case "empty" -> actual.isBlank();
+            case "not_empty" -> !actual.isBlank();
+            default -> throw badRequest("暂不支持条件操作符: " + operator);
+        };
+    }
+
     private String renderTemplate(String template, Map<String, Object> variables) {
         String rendered = template;
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
@@ -198,12 +258,35 @@ public class WorkflowRuntimeService {
         return rendered;
     }
 
-    private String nextNodeKey(String currentKey, List<WorkflowEdgeEntity> edges) {
-        return edges.stream()
+    private String nextNodeKey(String currentKey, List<WorkflowEdgeEntity> edges, String sourceHandle) {
+        List<WorkflowEdgeEntity> outgoing = edges.stream()
                 .filter(edge -> currentKey.equals(edge.getSourceNodeKey()))
+                .toList();
+        if (outgoing.isEmpty()) {
+            return null;
+        }
+        if (sourceHandle != null && !sourceHandle.isBlank()) {
+            return outgoing.stream()
+                    .filter(edge -> sourceHandle.equals(edge.getSourceHandle()))
+                    .map(WorkflowEdgeEntity::getTargetNodeKey)
+                    .findFirst()
+                    .orElseGet(() -> outgoing.stream()
+                            .filter(edge -> matchesEdgeCondition(edge, sourceHandle))
+                            .map(WorkflowEdgeEntity::getTargetNodeKey)
+                            .findFirst()
+                            .orElse(outgoing.getFirst().getTargetNodeKey()));
+        }
+        return outgoing.stream()
+                .filter(edge -> edge.getSourceHandle() == null || edge.getSourceHandle().isBlank())
                 .map(WorkflowEdgeEntity::getTargetNodeKey)
                 .findFirst()
-                .orElse(null);
+                .orElse(outgoing.getFirst().getTargetNodeKey());
+    }
+
+    private boolean matchesEdgeCondition(WorkflowEdgeEntity edge, String sourceHandle) {
+        Map<String, Object> condition = fromJson(edge.getConditionJson());
+        String value = valueAsString(firstPresent(condition, "handle", "branch", "value"), "");
+        return sourceHandle.equals(value);
     }
 
     private void saveExecution(String workflowType, String inputText, boolean enableSearch, WorkflowResponse response) {
@@ -267,6 +350,15 @@ public class WorkflowRuntimeService {
 
     private String valueAsString(Object value, String fallback) {
         return value == null ? fallback : String.valueOf(value);
+    }
+
+    private Object firstPresent(Map<?, ?> map, String... keys) {
+        for (String key : keys) {
+            if (map.containsKey(key)) {
+                return map.get(key);
+            }
+        }
+        return null;
     }
 
     private ResponseStatusException badRequest(String message) {

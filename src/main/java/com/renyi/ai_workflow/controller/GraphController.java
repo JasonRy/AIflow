@@ -188,6 +188,7 @@ public class GraphController {
                 .provider(entity.getProvider())
                 .enableSearch(entity.isEnableSearch())
                 .nodeTimings(entity.getNodeTimings())
+                .callTree(fromJson(entity.getCallTreeJson()))
                 .costMs(entity.getCostMs())
                 .timestamp(entity.getCreatedAt().format(FMT))
                 .build();
