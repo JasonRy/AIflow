@@ -6,7 +6,7 @@ Build AIflow toward a Dify-like workflow product, with an emphasis on consumer-f
 
 ## Current Branch
 
-`codex/consumer-workflow-ui`
+`codex/2026-05-14-dev`
 
 ## Progress
 
@@ -55,6 +55,12 @@ File: `src/main/resources/static/index.html`
 
 - Step library entries now create a workflow automatically when no current workflow exists.
 - Users can click "AI generation", "condition", or "set content" directly without first pressing "New".
+
+### Branch consolidation (2026-05-14)
+
+- Merged `codex/consumer-workflow-ui` into `develop`.
+- Merged `develop` into `main`.
+- Created and pushed today's development branch: `codex/2026-05-14-dev`.
 
 ## Next
 
